@@ -1,0 +1,201 @@
+@page "/"
+@implements IAsyncDisposable
+@inject ProblemCatalog Catalog
+@inject RoslynWorkspaceService Roslyn
+@inject CandidateRunner Runner
+@inject IJSRuntime JS
+
+<div class="console">
+    <aside class="sidebar">
+        <h1 class="brand">Interview<span>Console</span></h1>
+        <p class="hint">Pick a problem, implement it with IntelliSense, then run the tests.</p>
+        <a class="nav-link" href="/questions">Verbal / conceptual questions &rarr;</a>
+
+        @foreach (var level in Catalog.ByLevel)
+        {
+            <div class="level-group">
+                <div class="level-title">@LevelLabel(level.Key)</div>
+                @foreach (var problem in level)
+                {
+                    <button class="problem @(problem.Id == _current?.Id ? "active" : "")"
+                            @onclick="() => SelectAsync(problem)">
+                        <span class="problem-name">@problem.DisplayName</span>
+                        <span class="problem-tag">@problem.Category</span>
+                    </button>
+                }
+            </div>
+        }
+    </aside>
+
+    <section class="main">
+        @if (_current is not null)
+        {
+            <header class="toolbar">
+                <div class="toolbar-title">
+                    <strong>@_current.DisplayName</strong>
+                    <span class="chip">@LevelLabel(_current.Level)</span>
+                    <span class="chip">@_current.Category</span>
+                </div>
+                <div class="toolbar-actions">
+                    <button class="btn ghost" @onclick="ResetAsync" disabled="@_running">Reset to stub</button>
+                    <button class="btn primary" @onclick="RunAsync" disabled="@_running">
+                        @(_running ? "Running…" : "Run tests")
+                    </button>
+                </div>
+            </header>
+
+            <div class="editor-host">
+                <div id="editor" class="editor"></div>
+            </div>
+
+            <div class="results">
+                @if (_result is null)
+                {
+                    <div class="results-empty">Run the tests to see how your implementation does.</div>
+                }
+                else if (!_result.Compiled)
+                {
+                    <div class="results-header fail">Compilation failed</div>
+                    <ul class="issue-list">
+                        @foreach (var error in _result.Errors)
+                        {
+                            <li class="issue">
+                                <span class="loc">@(error.InCandidateCode ? $"Line {error.Line}" : "test harness")</span>
+                                <span class="msg">@error.Message</span>
+                            </li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <div class="results-header @(_result.AllPassed ? "pass" : "fail")">
+                        @_result.Passed / @_result.Total tests passing
+                    </div>
+                    <ul class="test-list">
+                        @foreach (var test in _result.Tests)
+                        {
+                            <li class="test @(test.Passed ? "ok" : "bad")">
+                                <span class="badge">@(test.Passed ? "PASS" : "FAIL")</span>
+                                <span class="test-name">@test.Name</span>
+                                @if (!test.Passed && test.FailureMessage is not null)
+                                {
+                                    <div class="test-msg">@test.FailureMessage</div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="placeholder">Select a problem to begin.</div>
+        }
+    </section>
+</div>
+
+@code {
+    private DotNetObjectReference<Index>? _ref;
+    private ProblemSet? _current;
+    private RunResult? _result;
+    private bool _running;
+    private bool _editorReady;
+
+    protected override void OnInitialized()
+    {
+        _current = Catalog.All.FirstOrDefault();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _current is not null)
+        {
+            _ref = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("monacoInterop.init", "editor", _ref, _current.StubCode);
+            _editorReady = true;
+        }
+    }
+
+    private async Task SelectAsync(ProblemSet problem)
+    {
+        if (_running || problem.Id == _current?.Id)
+        {
+            return;
+        }
+
+        _current = problem;
+        _result = null;
+
+        if (_editorReady)
+        {
+            await JS.InvokeVoidAsync("monacoInterop.setValue", problem.StubCode);
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        if (_current is null)
+        {
+            return;
+        }
+
+        _result = null;
+        await JS.InvokeVoidAsync("monacoInterop.setValue", _current.StubCode);
+    }
+
+    private async Task RunAsync()
+    {
+        if (_current is null || _running)
+        {
+            return;
+        }
+
+        _running = true;
+        _result = null;
+        StateHasChanged();
+
+        try
+        {
+            var code = await JS.InvokeAsync<string>("monacoInterop.getValue");
+            _result = await Runner.RunAsync(_current, code);
+        }
+        catch (Exception ex)
+        {
+            _result = new RunResult
+            {
+                Compiled = false,
+                Errors = new[] { new CompileError(ex.Message, 0, 0, false) },
+            };
+        }
+        finally
+        {
+            _running = false;
+            StateHasChanged();
+        }
+    }
+
+    [JSInvokable]
+    public async Task<IReadOnlyList<CompletionEntry>> ProvideCompletions(string code, int offset)
+        => await Roslyn.GetCompletionsAsync(code, offset);
+
+    [JSInvokable]
+    public IReadOnlyList<EditorMarker> ProvideDiagnostics(string code)
+        => Roslyn.GetDiagnostics(code);
+
+    private static string LevelLabel(string level) => level switch
+    {
+        "Developer1" => "Developer 1",
+        "Developer2" => "Developer 2",
+        _ => level,
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_editorReady)
+        {
+            try { await JS.InvokeVoidAsync("monacoInterop.dispose"); } catch { /* circuit gone */ }
+        }
+
+        _ref?.Dispose();
+    }
+}

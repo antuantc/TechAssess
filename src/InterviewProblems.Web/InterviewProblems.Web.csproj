@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>InterviewProblems.Web</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Roslyn: powers Monaco IntelliSense (completions + diagnostics) and the
+         in-browser compile/run harness. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" Version="4.8.0" />
+    <!-- Renders the docs/*/Questions.md verbal questions to HTML for the
+         in-app viewer. -->
+    <PackageReference Include="Markdig" Version="0.37.0" />
+    <!-- Same SQLite the tests use, so the compiled candidate assembly resolves it
+         from the shared runtime. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <!-- xUnit assemblies are referenced so the compiled candidate/test assembly
+         binds to the exact same Fact/Theory/Assert types this host loads. -->
+    <PackageReference Include="xunit" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Referenced only so the editor's IntelliSense can resolve Infrastructure
+         types. The candidate compile/run harness deliberately does NOT reference
+         this assembly (it would clash with the recompiled problem class). -->
+    <ProjectReference Include="..\InterviewProblems\InterviewProblems.csproj" />
+  </ItemGroup>
+
+</Project>

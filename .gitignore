@@ -1,0 +1,18 @@
+## .NET build output
+bin/
+obj/
+
+## User-specific
+*.user
+*.suo
+.vs/
+
+## Rider
+.idea/
+
+## Test results
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+coverage*.json
+coverage*.xml

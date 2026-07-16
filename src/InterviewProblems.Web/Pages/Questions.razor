@@ -1,0 +1,76 @@
+@page "/questions"
+@page "/questions/{Level}"
+@inject VerbalQuestionProvider Provider
+@inject NavigationManager Nav
+
+<div class="console">
+    <aside class="sidebar">
+        <h1 class="brand">Interview<span>Console</span></h1>
+        <a class="nav-link" href="/">&larr; Coding problems</a>
+
+        <div class="level-group">
+            <div class="level-title">Verbal / Conceptual</div>
+            @foreach (var lvl in _levels)
+            {
+                <button class="problem @(lvl.Level == _current?.Level ? "active" : "")"
+                        @onclick="() => Select(lvl.Level)">
+                    <span class="problem-name">@lvl.DisplayLevel</span>
+                </button>
+            }
+        </div>
+    </aside>
+
+    <section class="main">
+        @if (_current is not null)
+        {
+            <header class="toolbar">
+                <div class="toolbar-title">
+                    <strong>@_current.DisplayLevel</strong>
+                    <span class="chip">Verbal / Conceptual</span>
+                </div>
+                <div class="toolbar-actions">
+                    <button class="btn @(_interviewer ? "primary" : "ghost")"
+                            @onclick="() => _interviewer = !_interviewer">
+                        @(_interviewer ? "Interviewer view — answers shown" : "Candidate view — answers hidden")
+                    </button>
+                </div>
+            </header>
+
+            <div class="doc">
+                @((MarkupString)(_interviewer ? _current.InterviewerHtml : _current.CandidateHtml))
+            </div>
+        }
+        else
+        {
+            <div class="placeholder">No verbal questions found for this level.</div>
+        }
+    </section>
+</div>
+
+@code {
+    [Parameter] public string? Level { get; set; }
+
+    private IReadOnlyList<(string Level, string DisplayLevel)> _levels =
+        Array.Empty<(string, string)>();
+    private VerbalDoc? _current;
+    private bool _interviewer;
+
+    protected override void OnParametersSet()
+    {
+        _levels = Provider.AvailableLevels();
+
+        var target = Level ?? _levels.Select(l => l.Level).FirstOrDefault();
+        _current = target is null ? null : Provider.Get(target);
+    }
+
+    private void Select(string level)
+    {
+        if (level == _current?.Level)
+        {
+            return;
+        }
+
+        _interviewer = false;
+        Nav.NavigateTo($"/questions/{level}");
+    }
+}

@@ -1,0 +1,36 @@
+@page "/"
+@using Microsoft.AspNetCore.Components.Web
+@namespace InterviewProblems.Web.Pages
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interview Coding Console</title>
+    <base href="~/" />
+    <link rel="stylesheet" href="css/site.css" />
+    <link rel="icon" href="data:," />
+</head>
+<body>
+    <component type="typeof(App)" render-mode="ServerPrerendered" />
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">🗙</a>
+    </div>
+
+    <!-- Monaco Editor (AMD loader from CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+    <script>
+        require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' } });
+    </script>
+    <script src="js/monacoInterop.js"></script>
+    <script src="_framework/blazor.server.js"></script>
+</body>
+</html>
