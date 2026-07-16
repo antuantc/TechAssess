@@ -29,4 +29,36 @@
     <ProjectReference Include="..\InterviewProblems\InterviewProblems.csproj" />
   </ItemGroup>
 
+  <!--
+    The app reads the real interview source, tests, docs and SQL from disk at
+    runtime (see RepoLocator + ProblemCatalog). When run from the repo it walks
+    up to TechAssess.slnx. When published (e.g. Azure App Service) the repo tree
+    is absent, so we copy the required files into the publish output preserving
+    the src/tests/docs layout, plus a marker copy of TechAssess.slnx at the
+    content root. RepoLocator then resolves everything from the deployed folder.
+    Files land in the content root (not wwwroot), so they are NOT served as
+    static content — only Questions.md is copied from docs, never the AnswerKey.
+  -->
+  <ItemGroup>
+    <Content Include="..\..\TechAssess.slnx" CopyToOutputDirectory="PreserveNewest">
+      <Link>TechAssess.slnx</Link>
+    </Content>
+
+    <Content Include="..\InterviewProblems\**\*.cs;..\InterviewProblems\**\*.sql"
+             Exclude="..\InterviewProblems\bin\**;..\InterviewProblems\obj\**"
+             CopyToOutputDirectory="PreserveNewest">
+      <Link>src\InterviewProblems\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Content>
+
+    <Content Include="..\..\tests\InterviewProblems.Tests\**\*.cs"
+             Exclude="..\..\tests\InterviewProblems.Tests\bin\**;..\..\tests\InterviewProblems.Tests\obj\**"
+             CopyToOutputDirectory="PreserveNewest">
+      <Link>tests\InterviewProblems.Tests\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Content>
+
+    <Content Include="..\..\docs\**\Questions.md" CopyToOutputDirectory="PreserveNewest">
+      <Link>docs\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Content>
+  </ItemGroup>
+
 </Project>
