@@ -383,3 +383,87 @@ html, body {
     float: right;
     cursor: pointer;
 }
+
+/* ---------------------------------------------------------------------------
+   Responsive / mobile layout
+   The desktop layout is a fixed two-column grid locked to 100vh. On narrow
+   screens we stack the panels vertically and let the page scroll instead.
+   --------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+    html, body {
+        height: auto;
+        -webkit-text-size-adjust: 100%;
+    }
+
+    /* Let the shell grow with content and scroll the whole page. */
+    .app-shell, .console {
+        height: auto;
+        min-height: 100vh;
+    }
+
+    .console {
+        display: block;
+    }
+
+    /* Sidebar becomes a top strip with its own capped, scrollable area. */
+    .sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        max-height: 40vh;
+        padding: 14px 12px;
+    }
+
+    /* Main content stacks and grows naturally. */
+    .main {
+        display: block;
+        height: auto;
+        overflow: visible;
+    }
+
+    .toolbar {
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 12px 14px;
+    }
+
+    .toolbar-actions {
+        width: 100%;
+    }
+
+    .toolbar-actions .btn {
+        flex: 1 1 auto;
+    }
+
+    /* Monaco is absolutely positioned, so give its host an explicit height. */
+    .editor-host {
+        height: 60vh;
+        min-height: 320px;
+    }
+
+    .results {
+        max-height: none;
+        padding: 12px 14px;
+    }
+
+    .doc {
+        padding: 16px 16px 48px;
+    }
+
+    .test-msg {
+        margin-left: 0;
+    }
+}
+
+@media (max-width: 480px) {
+    .brand {
+        font-size: 18px;
+    }
+
+    .toolbar-title strong {
+        font-size: 14px;
+    }
+
+    .editor-host {
+        height: 55vh;
+    }
+}
