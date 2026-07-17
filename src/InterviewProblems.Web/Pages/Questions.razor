@@ -28,16 +28,10 @@
                     <strong>@_current.DisplayLevel</strong>
                     <span class="chip">Verbal / Conceptual</span>
                 </div>
-                <div class="toolbar-actions">
-                    <button class="btn @(_interviewer ? "primary" : "ghost")"
-                            @onclick="() => _interviewer = !_interviewer">
-                        @(_interviewer ? "Interviewer view — answers shown" : "Candidate view — answers hidden")
-                    </button>
-                </div>
             </header>
 
             <div class="doc">
-                @((MarkupString)(_interviewer ? _current.InterviewerHtml : _current.CandidateHtml))
+                @((MarkupString)_current.CandidateHtml)
             </div>
         }
         else
@@ -53,7 +47,6 @@
     private IReadOnlyList<(string Level, string DisplayLevel)> _levels =
         Array.Empty<(string, string)>();
     private VerbalDoc? _current;
-    private bool _interviewer;
 
     protected override void OnParametersSet()
     {
@@ -70,7 +63,6 @@
             return;
         }
 
-        _interviewer = false;
         Nav.NavigateTo($"/questions/{level}");
     }
 }

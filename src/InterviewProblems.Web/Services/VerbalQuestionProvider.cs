@@ -31,7 +31,7 @@ public sealed class VerbalQuestionProvider
     private static readonly string[] Levels = { "Developer1", "Developer2", "Senior" };
 
     private static readonly MarkdownPipeline Pipeline =
-        new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+        new MarkdownPipelineBuilder().UseAdvancedExtensions().DisableHtml().Build();
 
     // A hint bullet: "- *Looking for...:*" or "- *Follow-up:*".
     private static readonly Regex HintStart =

@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 
 namespace InterviewProblems.Infrastructure;
@@ -7,6 +8,32 @@ namespace InterviewProblems.Infrastructure;
 /// The result of running a SQL query: the column names and the rows returned.
 /// </summary>
 public sealed record QueryResult(IReadOnlyList<string> Columns, IReadOnlyList<object?[]> Rows);
+
+public static class SqlQueryPolicy
+{
+    private static readonly Regex DangerousSql = new(
+        @"\b(ATTACH|DETACH|PRAGMA|CREATE|INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|VACUUM|REINDEX|ANALYZE)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    public static bool IsReadOnlySingleQuery(string sql)
+    {
+        var trimmed = sql.Trim();
+        if (trimmed.EndsWith(';'))
+        {
+            trimmed = trimmed[..^1].TrimEnd();
+        }
+
+        if (trimmed.Contains(';') || DangerousSql.IsMatch(trimmed))
+        {
+            return false;
+        }
+
+        return Regex.IsMatch(
+            trimmed,
+            @"^(?:--[^\r\n]*(?:\r?\n|$)|/\*.*?\*/\s*)*(SELECT|WITH|EXPLAIN)\b",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
+    }
+}
 
 /// <summary>
 /// Builds a fresh, seeded in-memory SQLite database from the embedded
@@ -44,6 +71,12 @@ public static class InterviewDatabase
     /// <summary>Run <paramref name="sql"/> against an existing connection.</summary>
     public static QueryResult Query(SqliteConnection connection, string sql)
     {
+        if (!SqlQueryPolicy.IsReadOnlySingleQuery(sql))
+        {
+            throw new InvalidOperationException(
+                "Only one read-only SELECT, WITH, or EXPLAIN query is allowed.");
+        }
+
         using var command = connection.CreateCommand();
         command.CommandText = sql;
 

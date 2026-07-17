@@ -57,6 +57,9 @@ public sealed class SqlRunResult
 public sealed class SqlWorkbench
 {
     private const char CellSeparator = '\u001f';
+    private const int MaxSqlLength = 10_000;
+    private const int MaxResultRows = 500;
+    private const int CommandTimeoutSeconds = 2;
 
     private readonly IReadOnlyList<SqlQuestion> _questions = BuildQuestions();
     private readonly Lazy<IReadOnlyList<SchemaTable>> _schema;
@@ -90,11 +93,29 @@ public sealed class SqlWorkbench
             return new SqlRunResult { Executed = false, Error = "Write a query, then run it." };
         }
 
+        if (candidateSql.Length > MaxSqlLength)
+        {
+            return new SqlRunResult
+            {
+                Executed = false,
+                Error = $"Query is too long. Limit it to {MaxSqlLength:N0} characters.",
+            };
+        }
+
+        if (!SqlQueryPolicy.IsReadOnlySingleQuery(candidateSql))
+        {
+            return new SqlRunResult
+            {
+                Executed = false,
+                Error = "Only one read-only SELECT, WITH, or EXPLAIN query is allowed.",
+            };
+        }
+
         QueryResult candidate;
         try
         {
             using var connection = InterviewDatabase.CreateSeededConnection();
-            candidate = InterviewDatabase.Query(connection, candidateSql);
+            candidate = ExecuteCandidate(connection, candidateSql);
         }
         catch (SqliteException ex)
         {
@@ -123,6 +144,40 @@ public sealed class SqlWorkbench
 
     private static IReadOnlyList<string> DisplayRow(object?[] row) =>
         row.Select(Display).ToList();
+
+    private static QueryResult ExecuteCandidate(SqliteConnection connection, string sql)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.CommandTimeout = CommandTimeoutSeconds;
+
+        using var reader = command.ExecuteReader();
+        var columns = new string[reader.FieldCount];
+        for (var i = 0; i < reader.FieldCount; i++)
+        {
+            columns[i] = reader.GetName(i);
+        }
+
+        var rows = new List<object?[]>();
+        while (reader.Read())
+        {
+            if (rows.Count >= MaxResultRows)
+            {
+                throw new InvalidOperationException(
+                    $"Query returned more than {MaxResultRows:N0} rows.");
+            }
+
+            var values = new object?[reader.FieldCount];
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                values[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+            }
+
+            rows.Add(values);
+        }
+
+        return new QueryResult(columns, rows);
+    }
 
     private static bool ResultsMatch(QueryResult candidate, QueryResult expected, bool ordered)
     {
@@ -179,9 +234,19 @@ public sealed class SqlWorkbench
         var tables = new List<SchemaTable>();
         foreach (var name in tableNames)
         {
-            var info = InterviewDatabase.Query(connection, $"PRAGMA table_info({name});");
+            using var command = connection.CreateCommand();
+            command.CommandText = $"PRAGMA table_info(\"{name.Replace("\"", "\"\"")}\");";
+            using var reader = command.ExecuteReader();
+            var rows = new List<object?[]>();
+            while (reader.Read())
+            {
+                var row = new object?[reader.FieldCount];
+                reader.GetValues(row);
+                rows.Add(row);
+            }
+
             // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
-            var columns = info.Rows
+            var columns = rows
                 .Select(r => new SchemaColumn(
                     r[1]?.ToString() ?? string.Empty,
                     r[2]?.ToString() ?? string.Empty))

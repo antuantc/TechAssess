@@ -10,16 +10,16 @@
   <ItemGroup>
     <!-- Roslyn: powers Monaco IntelliSense (completions + diagnostics) and the
          in-browser compile/run harness. -->
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" Version="4.8.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" Version="5.6.0" />
     <!-- Renders the docs/*/Questions.md verbal questions to HTML for the
          in-app viewer. -->
-    <PackageReference Include="Markdig" Version="0.37.0" />
+    <PackageReference Include="Markdig" Version="1.3.2" />
     <!-- Same SQLite the tests use, so the compiled candidate assembly resolves it
          from the shared runtime. -->
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
     <!-- xUnit assemblies are referenced so the compiled candidate/test assembly
          binds to the exact same Fact/Theory/Assert types this host loads. -->
-    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit" Version="2.9.3" />
   </ItemGroup>
 
   <ItemGroup>
