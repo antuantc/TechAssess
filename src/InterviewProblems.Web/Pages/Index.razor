@@ -103,7 +103,21 @@
             </header>
         }
 
-        @if (_current is not null || _currentSql is not null)
+        @if (_currentSql is not null)
+        {
+            <div class="editor-host sql-editor-host">
+                <textarea id="sql-editor"
+                          class="sql-editor"
+                          @bind="_sqlCode"
+                          @bind:event="oninput"
+                          spellcheck="false"
+                          autocapitalize="off"
+                          autocomplete="off"
+                          autocorrect="off"
+                          aria-label="SQL query editor"></textarea>
+            </div>
+        }
+        else if (_current is not null)
         {
             <div class="editor-host">
                 <div id="editor" class="editor"></div>
@@ -221,6 +235,7 @@
     private SqlQuestion? _currentSql;
     private RunResult? _result;
     private SqlRunResult? _sqlResult;
+    private string _sqlCode = string.Empty;
     private bool _running;
     private bool _showSchema;
 
@@ -246,18 +261,21 @@
     }
 
     /// <summary>
-    /// Reconciles the mounted Monaco editor with the current selection: recreates
-    /// it when switching between the C# and SQL languages, or just swaps its value
-    /// when staying in the same language.
+    /// Reconciles the mounted Monaco editor with the current C# selection. SQL
+    /// uses a native textarea so it remains editable with touch input.
     /// </summary>
     private async Task SyncEditorAsync()
     {
-        var target = _currentSql is not null ? "sql"
-            : _current is not null ? "csharp"
-            : null;
+        var target = _current is not null ? "csharp" : null;
 
         if (target is null)
         {
+            if (_editorMode is not null)
+            {
+                try { await JS.InvokeVoidAsync("monacoInterop.dispose"); } catch { /* circuit gone */ }
+                _editorMode = null;
+            }
+
             return;
         }
 
@@ -278,14 +296,7 @@
         }
 
         var initial = _pendingCode ?? string.Empty;
-        if (target == "csharp")
-        {
-            await JS.InvokeVoidAsync("monacoInterop.init", "editor", _ref, initial, "csharp");
-        }
-        else
-        {
-            await JS.InvokeVoidAsync("monacoInterop.init", "editor", null, initial, "sql");
-        }
+        await JS.InvokeVoidAsync("monacoInterop.init", "editor", _ref, initial, "csharp");
 
         _editorMode = target;
         _pendingCode = null;
@@ -317,7 +328,7 @@
         _result = null;
         _sqlResult = null;
         _showSchema = false;
-        _pendingCode = question.StarterSql;
+        _sqlCode = question.StarterSql;
     }
 
     private async Task ResetAsync()
@@ -375,8 +386,7 @@
 
         try
         {
-            var sql = await JS.InvokeAsync<string>("monacoInterop.getValue");
-            _sqlResult = Sql.Run(_currentSql.Id, sql);
+            _sqlResult = Sql.Run(_currentSql.Id, _sqlCode);
         }
         catch (Exception ex)
         {
