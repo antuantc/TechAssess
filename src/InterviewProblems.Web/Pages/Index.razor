@@ -1,6 +1,7 @@
 @page "/"
 @implements IAsyncDisposable
 @inject ProblemCatalog Catalog
+@inject SqlWorkbench Sql
 @inject RoslynWorkspaceService Roslyn
 @inject CandidateRunner Runner
 @inject IJSRuntime JS
@@ -8,19 +9,34 @@
 <div class="console">
     <aside class="sidebar">
         <h1 class="brand">Interview<span>Console</span></h1>
-        <p class="hint">Pick a problem, implement it with IntelliSense, then run the tests.</p>
+        <p class="hint">Pick a problem, implement it with IntelliSense, then run the tests. SQL problems run live against the seeded database.</p>
         <a class="nav-link" href="/questions">Verbal / conceptual questions &rarr;</a>
 
-        @foreach (var level in Catalog.ByLevel)
+        @foreach (var level in Levels)
         {
+            var coding = Catalog.All.Where(p => p.Level == level).ToList();
+            var sqlQuestions = Sql.ForLevel(level).ToList();
+            if (coding.Count == 0 && sqlQuestions.Count == 0)
+            {
+                continue;
+            }
+
             <div class="level-group">
-                <div class="level-title">@LevelLabel(level.Key)</div>
-                @foreach (var problem in level)
+                <div class="level-title">@LevelLabel(level)</div>
+                @foreach (var problem in coding)
                 {
                     <button class="problem @(problem.Id == _current?.Id ? "active" : "")"
-                            @onclick="() => SelectAsync(problem)">
+                            @onclick="() => SelectProblem(problem)">
                         <span class="problem-name">@problem.DisplayName</span>
                         <span class="problem-tag">@problem.Category</span>
+                    </button>
+                }
+                @foreach (var question in sqlQuestions)
+                {
+                    <button class="problem @(question.Id == _currentSql?.Id ? "active" : "")"
+                            @onclick="() => SelectSql(question)">
+                        <span class="problem-name">@question.Title</span>
+                        <span class="problem-tag">SQL</span>
                     </button>
                 }
             </div>
@@ -28,7 +44,49 @@
     </aside>
 
     <section class="main">
-        @if (_current is not null)
+        @if (_currentSql is not null)
+        {
+            <header class="toolbar">
+                <div class="toolbar-title">
+                    <strong>@_currentSql.Title</strong>
+                    <span class="chip">@LevelLabel(_currentSql.Level)</span>
+                    <span class="chip">SQL</span>
+                </div>
+                <div class="toolbar-actions">
+                    <button class="btn ghost" @onclick="() => _showSchema = !_showSchema">
+                        @(_showSchema ? "Hide schema" : "Show schema")
+                    </button>
+                    <button class="btn primary" @onclick="RunSqlAsync" disabled="@_running">
+                        @(_running ? "Running…" : "Run query")
+                    </button>
+                </div>
+            </header>
+
+            <div class="sql-prompt">
+                <p class="sql-prompt-text">@_currentSql.Prompt</p>
+                @if (_showSchema)
+                {
+                    <div class="schema">
+                        @foreach (var table in Sql.Schema)
+                        {
+                            <div class="schema-table">
+                                <div class="schema-table-name">@table.Name</div>
+                                <ul class="schema-cols">
+                                    @foreach (var column in table.Columns)
+                                    {
+                                        <li>
+                                            <span class="schema-col-name">@column.Name</span>
+                                            <span class="schema-col-type">@column.Type</span>
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else if (_current is not null)
         {
             <header class="toolbar">
                 <div class="toolbar-title">
@@ -43,11 +101,76 @@
                     </button>
                 </div>
             </header>
+        }
 
+        @if (_current is not null || _currentSql is not null)
+        {
             <div class="editor-host">
                 <div id="editor" class="editor"></div>
             </div>
+        }
+        else
+        {
+            <div class="placeholder">Select a problem to begin.</div>
+        }
 
+        @if (_currentSql is not null)
+        {
+            <div class="results">
+                @if (_sqlResult is null)
+                {
+                    <div class="results-empty">Run your query to see the result grid.</div>
+                }
+                else if (!_sqlResult.Executed)
+                {
+                    <div class="results-header fail">SQL error</div>
+                    <pre class="sql-error">@_sqlResult.Error</pre>
+                }
+                else
+                {
+                    <div class="results-header @(_sqlResult.Correct ? "pass" : "fail")">
+                        @(_sqlResult.Correct
+                            ? "Correct — result matches the expected output."
+                            : "Not quite — result does not match the expected output.")
+                    </div>
+                    <div class="result-meta">
+                        @_sqlResult.Rows.Count row(s) returned · @_sqlResult.ExpectedRowCount expected
+                    </div>
+                    @if (_sqlResult.Columns.Count == 0)
+                    {
+                        <div class="results-empty">Query returned no columns.</div>
+                    }
+                    else
+                    {
+                        <div class="grid-wrap">
+                            <table class="grid">
+                                <thead>
+                                    <tr>
+                                        @foreach (var column in _sqlResult.Columns)
+                                        {
+                                            <th>@column</th>
+                                        }
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var row in _sqlResult.Rows)
+                                    {
+                                        <tr>
+                                            @foreach (var cell in row)
+                                            {
+                                                <td>@cell</td>
+                                            }
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                }
+            </div>
+        }
+        else if (_current is not null)
+        {
             <div class="results">
                 @if (_result is null)
                 {
@@ -87,36 +210,88 @@
                 }
             </div>
         }
-        else
-        {
-            <div class="placeholder">Select a problem to begin.</div>
-        }
     </section>
 </div>
 
 @code {
+    private static readonly string[] Levels = { "Developer1", "Developer2", "Senior" };
+
     private DotNetObjectReference<Index>? _ref;
     private ProblemSet? _current;
+    private SqlQuestion? _currentSql;
     private RunResult? _result;
+    private SqlRunResult? _sqlResult;
     private bool _running;
-    private bool _editorReady;
+    private bool _showSchema;
+
+    // The Monaco editor language currently mounted ("csharp" | "sql" | null) and
+    // the source to load into it on the next render sync.
+    private string? _editorMode;
+    private string? _pendingCode;
 
     protected override void OnInitialized()
     {
         _current = Catalog.All.FirstOrDefault();
+        _pendingCode = _current?.StubCode;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && _current is not null)
+        if (firstRender)
         {
             _ref = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("monacoInterop.init", "editor", _ref, _current.StubCode);
-            _editorReady = true;
         }
+
+        await SyncEditorAsync();
     }
 
-    private async Task SelectAsync(ProblemSet problem)
+    /// <summary>
+    /// Reconciles the mounted Monaco editor with the current selection: recreates
+    /// it when switching between the C# and SQL languages, or just swaps its value
+    /// when staying in the same language.
+    /// </summary>
+    private async Task SyncEditorAsync()
+    {
+        var target = _currentSql is not null ? "sql"
+            : _current is not null ? "csharp"
+            : null;
+
+        if (target is null)
+        {
+            return;
+        }
+
+        if (target == _editorMode)
+        {
+            if (_pendingCode is not null)
+            {
+                await JS.InvokeVoidAsync("monacoInterop.setValue", _pendingCode);
+                _pendingCode = null;
+            }
+
+            return;
+        }
+
+        if (_editorMode is not null)
+        {
+            try { await JS.InvokeVoidAsync("monacoInterop.dispose"); } catch { /* circuit gone */ }
+        }
+
+        var initial = _pendingCode ?? string.Empty;
+        if (target == "csharp")
+        {
+            await JS.InvokeVoidAsync("monacoInterop.init", "editor", _ref, initial, "csharp");
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("monacoInterop.init", "editor", null, initial, "sql");
+        }
+
+        _editorMode = target;
+        _pendingCode = null;
+    }
+
+    private void SelectProblem(ProblemSet problem)
     {
         if (_running || problem.Id == _current?.Id)
         {
@@ -124,12 +299,25 @@
         }
 
         _current = problem;
+        _currentSql = null;
         _result = null;
+        _sqlResult = null;
+        _pendingCode = problem.StubCode;
+    }
 
-        if (_editorReady)
+    private void SelectSql(SqlQuestion question)
+    {
+        if (_running || question.Id == _currentSql?.Id)
         {
-            await JS.InvokeVoidAsync("monacoInterop.setValue", problem.StubCode);
+            return;
         }
+
+        _currentSql = question;
+        _current = null;
+        _result = null;
+        _sqlResult = null;
+        _showSchema = false;
+        _pendingCode = question.StarterSql;
     }
 
     private async Task ResetAsync()
@@ -174,6 +362,33 @@
         }
     }
 
+    private async Task RunSqlAsync()
+    {
+        if (_currentSql is null || _running)
+        {
+            return;
+        }
+
+        _running = true;
+        _sqlResult = null;
+        StateHasChanged();
+
+        try
+        {
+            var sql = await JS.InvokeAsync<string>("monacoInterop.getValue");
+            _sqlResult = Sql.Run(_currentSql.Id, sql);
+        }
+        catch (Exception ex)
+        {
+            _sqlResult = new SqlRunResult { Executed = false, Error = ex.Message };
+        }
+        finally
+        {
+            _running = false;
+            StateHasChanged();
+        }
+    }
+
     [JSInvokable]
     public async Task<IReadOnlyList<CompletionEntry>> ProvideCompletions(string code, int offset)
         => await Roslyn.GetCompletionsAsync(code, offset);
@@ -191,7 +406,7 @@
 
     public async ValueTask DisposeAsync()
     {
-        if (_editorReady)
+        if (_editorMode is not null)
         {
             try { await JS.InvokeVoidAsync("monacoInterop.dispose"); } catch { /* circuit gone */ }
         }

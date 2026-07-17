@@ -8,6 +8,7 @@ builder.Services.AddServerSideBlazor();
 builder.Services.AddSingleton<RepoLocator>();
 builder.Services.AddSingleton<ReferenceProvider>();
 builder.Services.AddSingleton<ProblemCatalog>();
+builder.Services.AddSingleton<SqlWorkbench>();
 builder.Services.AddSingleton<VerbalQuestionProvider>();
 builder.Services.AddSingleton<RoslynWorkspaceService>();
 builder.Services.AddScoped<CandidateRunner>();

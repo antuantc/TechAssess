@@ -67,6 +67,14 @@ public sealed class ProblemCatalog
             foreach (var classFile in Directory.GetFiles(srcDir, "*.cs").OrderBy(f => f))
             {
                 var name = Path.GetFileNameWithoutExtension(classFile);
+
+                // SQL problems are served by SqlWorkbench as an interactive SQL
+                // editor (sql-practice.com style), not as an editable C# class.
+                if (name.Contains("Sql", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 var testFile = Path.Combine(testDir, $"{name}Tests.cs");
                 if (!File.Exists(testFile))
                 {
@@ -74,13 +82,7 @@ public sealed class ProblemCatalog
                     continue;
                 }
 
-                var isSql = name.Contains("Sql", StringComparison.OrdinalIgnoreCase);
                 var support = new List<string>();
-                if (isSql)
-                {
-                    support.Add(_repo.InfrastructureSourcePath);
-                    support.Add(_repo.SqlTestHelperSourcePath);
-                }
 
                 sets.Add(new ProblemSet
                 {
@@ -88,8 +90,8 @@ public sealed class ProblemCatalog
                     Level = level,
                     Name = name,
                     DisplayName = Humanize(name),
-                    Category = isSql ? "SQL" : Humanize(name.Replace("Problems", string.Empty)),
-                    IsSql = isSql,
+                    Category = Humanize(name.Replace("Problems", string.Empty)),
+                    IsSql = false,
                     ClassFilePath = classFile,
                     TestFilePaths = new[] { testFile },
                     SupportFilePaths = support,

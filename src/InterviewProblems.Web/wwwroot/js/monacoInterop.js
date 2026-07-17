@@ -109,25 +109,30 @@ window.monacoInterop = (function () {
     }
 
     return {
-        init: function (elementId, ref, initialCode) {
+        init: function (elementId, ref, initialCode, language) {
+            language = language || 'csharp';
             dotNetRef = ref;
             return new Promise(function (resolve) {
                 require(['vs/editor/editor.main'], function () {
-                    registerProviders();
+                    if (language === 'csharp') {
+                        registerProviders();
+                    }
                     editor = monaco.editor.create(document.getElementById(elementId), {
                         value: initialCode,
-                        language: 'csharp',
+                        language: language,
                         theme: 'vs-dark',
                         automaticLayout: true,
                         fontSize: 14,
                         minimap: { enabled: false },
                         scrollBeyondLastLine: false,
-                        tabSize: 4,
+                        tabSize: language === 'sql' ? 2 : 4,
                         renderWhitespace: 'selection'
                     });
 
-                    editor.onDidChangeModelContent(scheduleDiagnostics);
-                    scheduleDiagnostics();
+                    if (language === 'csharp') {
+                        editor.onDidChangeModelContent(scheduleDiagnostics);
+                        scheduleDiagnostics();
+                    }
                     resolve();
                 });
             });
