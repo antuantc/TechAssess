@@ -314,7 +314,7 @@ public sealed class SqlWorkbench
         var tables = new List<SchemaTable>();
         foreach (var name in tableNames)
         {
-            var info = InterviewDatabase.Query(connection, $"PRAGMA table_info({name});");
+            var info = ReadSchemaInfo(connection, name);
             // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
             var columns = info.Rows
                 .Select(r => new SchemaColumn(
@@ -325,6 +325,33 @@ public sealed class SqlWorkbench
         }
 
         return tables;
+    }
+
+    private static QueryResult ReadSchemaInfo(SqliteConnection connection, string tableName)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info({tableName});";
+
+        using var reader = command.ExecuteReader();
+        var columns = new string[reader.FieldCount];
+        for (var index = 0; index < reader.FieldCount; index++)
+        {
+            columns[index] = reader.GetName(index);
+        }
+
+        var rows = new List<object?[]>();
+        while (reader.Read())
+        {
+            var values = new object?[reader.FieldCount];
+            for (var index = 0; index < reader.FieldCount; index++)
+            {
+                values[index] = reader.IsDBNull(index) ? null : reader.GetValue(index);
+            }
+
+            rows.Add(values);
+        }
+
+        return new QueryResult(columns, rows);
     }
 
     private static IReadOnlyList<SqlQuestion> BuildQuestions()
