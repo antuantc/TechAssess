@@ -12,10 +12,7 @@ public sealed class VerbalDoc
     public required string Level { get; init; }
     public required string DisplayLevel { get; init; }
 
-    /// <summary>Full document, including the <c>*Looking for:*</c> interviewer hints.</summary>
-    public required string InterviewerHtml { get; init; }
-
-    /// <summary>Prompts only — the interviewer hint/follow-up lines are removed.</summary>
+    /// <summary>Prompts only. Interviewer hints are never sent to candidate sessions.</summary>
     public required string CandidateHtml { get; init; }
 }
 
@@ -31,7 +28,7 @@ public sealed class VerbalQuestionProvider
     private static readonly string[] Levels = { "Developer1", "Developer2", "Senior" };
 
     private static readonly MarkdownPipeline Pipeline =
-        new MarkdownPipelineBuilder().UseAdvancedExtensions().DisableHtml().Build();
+        new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
 
     // A hint bullet: "- *Looking for...:*" or "- *Follow-up:*".
     private static readonly Regex HintStart =
@@ -72,7 +69,6 @@ public sealed class VerbalQuestionProvider
         {
             Level = normalized,
             DisplayLevel = DisplayLevel(normalized),
-            InterviewerHtml = Markdown.ToHtml(markdown, Pipeline),
             CandidateHtml = Markdown.ToHtml(StripHints(markdown), Pipeline),
         };
     }

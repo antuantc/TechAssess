@@ -126,6 +126,8 @@ html, body {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    min-height: 0;
+    min-width: 0;
     overflow: hidden;
 }
 
@@ -192,11 +194,85 @@ html, body {
     overflow: hidden;
     flex: 1 1 auto;
     min-height: 0;
+    min-width: 0;
 }
 
 .editor {
     position: absolute;
     inset: 0;
+}
+
+.csharp-editor-host {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--bg);
+}
+
+.code-editor-shell {
+    position: relative;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+    background: #1e1e1e;
+}
+
+.csharp-highlight,
+.csharp-editor {
+    display: block;
+    align-self: stretch;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    flex: 1 1 0;
+    padding: 16px 18px;
+    font-family: 'Cascadia Code', Consolas, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    tab-size: 4;
+    white-space: pre;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.csharp-highlight {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    color: #d4d4d4;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.csharp-highlight code {
+    font: inherit;
+}
+
+.csharp-editor {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    resize: none;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: transparent;
+    caret-color: #fff;
+    overflow: auto;
+}
+
+.csharp-editor::selection {
+    background: rgba(38, 79, 120, 0.85);
+}
+
+.csharp-highlight .syntax-keyword { color: #569cd6; }
+.csharp-highlight .syntax-type { color: #4ec9b0; }
+.csharp-highlight .syntax-string { color: #ce9178; }
+.csharp-highlight .syntax-comment { color: #6a9955; }
+.csharp-highlight .syntax-number { color: #b5cea8; }
+
+.csharp-editor:focus {
+    box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .sql-editor-host {
@@ -208,10 +284,11 @@ html, body {
 
 .sql-editor {
     display: block;
+    align-self: stretch;
     width: 100%;
-    height: 100%;
+    height: auto;
     min-height: 0;
-    flex: 1 1 auto;
+    flex: 1 1 0;
     resize: none;
     border: 0;
     outline: none;

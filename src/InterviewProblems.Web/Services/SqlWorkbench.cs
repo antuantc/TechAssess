@@ -57,9 +57,24 @@ public sealed class SqlRunResult
 public sealed class SqlWorkbench
 {
     private const char CellSeparator = '\u001f';
-    private const int MaxSqlLength = 10_000;
-    private const int MaxResultRows = 500;
-    private const int CommandTimeoutSeconds = 2;
+    private static readonly HashSet<string> ForbiddenKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ALTER",
+        "ATTACH",
+        "CREATE",
+        "DELETE",
+        "DETACH",
+        "DROP",
+        "INSERT",
+        "PRAGMA",
+        "REINDEX",
+        "RELEASE",
+        "REPLACE",
+        "ROLLBACK",
+        "SAVEPOINT",
+        "UPDATE",
+        "VACUUM",
+    };
 
     private readonly IReadOnlyList<SqlQuestion> _questions = BuildQuestions();
     private readonly Lazy<IReadOnlyList<SchemaTable>> _schema;
@@ -93,29 +108,17 @@ public sealed class SqlWorkbench
             return new SqlRunResult { Executed = false, Error = "Write a query, then run it." };
         }
 
-        if (candidateSql.Length > MaxSqlLength)
+        var validationError = ValidateReadOnlyQuery(candidateSql);
+        if (validationError is not null)
         {
-            return new SqlRunResult
-            {
-                Executed = false,
-                Error = $"Query is too long. Limit it to {MaxSqlLength:N0} characters.",
-            };
-        }
-
-        if (!SqlQueryPolicy.IsReadOnlySingleQuery(candidateSql))
-        {
-            return new SqlRunResult
-            {
-                Executed = false,
-                Error = "Only one read-only SELECT, WITH, or EXPLAIN query is allowed.",
-            };
+            return new SqlRunResult { Executed = false, Error = validationError };
         }
 
         QueryResult candidate;
         try
         {
             using var connection = InterviewDatabase.CreateSeededConnection();
-            candidate = ExecuteCandidate(connection, candidateSql);
+            candidate = InterviewDatabase.Query(connection, candidateSql);
         }
         catch (SqliteException ex)
         {
@@ -142,42 +145,119 @@ public sealed class SqlWorkbench
         };
     }
 
+    private static string? ValidateReadOnlyQuery(string sql)
+    {
+        var firstKeyword = string.Empty;
+        var statementEnded = false;
+
+        for (var index = 0; index < sql.Length;)
+        {
+            if (char.IsWhiteSpace(sql[index]))
+            {
+                index++;
+                continue;
+            }
+
+            if (sql[index] == '-' && index + 1 < sql.Length && sql[index + 1] == '-')
+            {
+                index += 2;
+                while (index < sql.Length && sql[index] != '\n')
+                {
+                    index++;
+                }
+
+                continue;
+            }
+
+            if (sql[index] == '/' && index + 1 < sql.Length && sql[index + 1] == '*')
+            {
+                var commentEnd = sql.IndexOf("*/", index + 2, StringComparison.Ordinal);
+                if (commentEnd < 0)
+                {
+                    return "The query contains an unterminated comment.";
+                }
+
+                index = commentEnd + 2;
+                continue;
+            }
+
+            if (sql[index] is '\'' or '"' or '`')
+            {
+                var quote = sql[index++];
+                var closed = false;
+                while (index < sql.Length)
+                {
+                    if (sql[index] != quote)
+                    {
+                        index++;
+                        continue;
+                    }
+
+                    if (index + 1 < sql.Length && sql[index + 1] == quote)
+                    {
+                        index += 2;
+                        continue;
+                    }
+
+                    index++;
+                    closed = true;
+                    break;
+                }
+
+                if (!closed)
+                {
+                    return "The query contains an unterminated quoted value.";
+                }
+
+                continue;
+            }
+
+            if (sql[index] == ';')
+            {
+                if (statementEnded)
+                {
+                    return "Only one SQL statement is allowed.";
+                }
+
+                statementEnded = true;
+                index++;
+                continue;
+            }
+
+            if (statementEnded)
+            {
+                return "Only one SQL statement is allowed.";
+            }
+
+            if (char.IsLetter(sql[index]) || sql[index] == '_')
+            {
+                var wordStart = index++;
+                while (index < sql.Length && (char.IsLetterOrDigit(sql[index]) || sql[index] == '_'))
+                {
+                    index++;
+                }
+
+                var keyword = sql[wordStart..index];
+                firstKeyword = firstKeyword.Length == 0 ? keyword : firstKeyword;
+                if (ForbiddenKeywords.Contains(keyword))
+                {
+                    return "Only read-only SELECT queries are allowed.";
+                }
+
+                continue;
+            }
+
+            index++;
+        }
+
+        return firstKeyword.Equals("SELECT", StringComparison.OrdinalIgnoreCase)
+            || firstKeyword.Equals("WITH", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : "Only read-only SELECT queries are allowed.";
+    }
+
     private static IReadOnlyList<string> DisplayRow(object?[] row) =>
         row.Select(Display).ToList();
-
-    private static QueryResult ExecuteCandidate(SqliteConnection connection, string sql)
-    {
-        using var command = connection.CreateCommand();
-        command.CommandText = sql;
-        command.CommandTimeout = CommandTimeoutSeconds;
-
-        using var reader = command.ExecuteReader();
-        var columns = new string[reader.FieldCount];
-        for (var i = 0; i < reader.FieldCount; i++)
-        {
-            columns[i] = reader.GetName(i);
-        }
-
-        var rows = new List<object?[]>();
-        while (reader.Read())
-        {
-            if (rows.Count >= MaxResultRows)
-            {
-                throw new InvalidOperationException(
-                    $"Query returned more than {MaxResultRows:N0} rows.");
-            }
-
-            var values = new object?[reader.FieldCount];
-            for (var i = 0; i < reader.FieldCount; i++)
-            {
-                values[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
-            }
-
-            rows.Add(values);
-        }
-
-        return new QueryResult(columns, rows);
-    }
 
     private static bool ResultsMatch(QueryResult candidate, QueryResult expected, bool ordered)
     {
@@ -234,19 +314,9 @@ public sealed class SqlWorkbench
         var tables = new List<SchemaTable>();
         foreach (var name in tableNames)
         {
-            using var command = connection.CreateCommand();
-            command.CommandText = $"PRAGMA table_info(\"{name.Replace("\"", "\"\"")}\");";
-            using var reader = command.ExecuteReader();
-            var rows = new List<object?[]>();
-            while (reader.Read())
-            {
-                var row = new object?[reader.FieldCount];
-                reader.GetValues(row);
-                rows.Add(row);
-            }
-
+            var info = InterviewDatabase.Query(connection, $"PRAGMA table_info({name});");
             // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
-            var columns = rows
+            var columns = info.Rows
                 .Select(r => new SchemaColumn(
                     r[1]?.ToString() ?? string.Empty,
                     r[2]?.ToString() ?? string.Empty))

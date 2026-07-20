@@ -1,0 +1,31 @@
+# .NET Core
+trigger:
+  branches:
+    include:
+      - main
+      - releases/*
+  tags:
+    include:
+      - v*
+
+schedules:
+  - cron: "0 12 * * 0"
+    displayName: Sunday build
+    branches:
+      include:
+        - main
+    always: true
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: Hlc/PipelinesTemplates
+
+extends:
+  template: Templates/DotNetCore/web-v2.yml@templates
+  parameters:
+    ###Required:
+    siteName: 'techassess'
+    isAzureAppService: true
+    runCodeAnalysis: true

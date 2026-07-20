@@ -1,8 +1,6 @@
 @page "/"
-@implements IAsyncDisposable
 @inject ProblemCatalog Catalog
 @inject SqlWorkbench Sql
-@inject RoslynWorkspaceService Roslyn
 @inject CandidateRunner Runner
 @inject IJSRuntime JS
 
@@ -119,8 +117,19 @@
         }
         else if (_current is not null)
         {
-            <div class="editor-host">
-                <div id="editor" class="editor"></div>
+            <div class="editor-host csharp-editor-host">
+                <div class="code-editor-shell">
+                    <pre id="csharp-highlight" class="csharp-highlight" aria-hidden="true"><code></code></pre>
+                <textarea id="csharp-editor"
+                          class="csharp-editor"
+                          @bind="_code"
+                          @bind:event="oninput"
+                          spellcheck="false"
+                          autocapitalize="off"
+                          autocomplete="off"
+                          autocorrect="off"
+                          aria-label="C# code editor"></textarea>
+                </div>
             </div>
         }
         else
@@ -230,76 +239,27 @@
 @code {
     private static readonly string[] Levels = { "Developer1", "Developer2", "Senior" };
 
-    private DotNetObjectReference<Index>? _ref;
     private ProblemSet? _current;
     private SqlQuestion? _currentSql;
     private RunResult? _result;
     private SqlRunResult? _sqlResult;
     private string _sqlCode = string.Empty;
+    private string _code = string.Empty;
     private bool _running;
     private bool _showSchema;
-
-    // The Monaco editor language currently mounted ("csharp" | "sql" | null) and
-    // the source to load into it on the next render sync.
-    private string? _editorMode;
-    private string? _pendingCode;
 
     protected override void OnInitialized()
     {
         _current = Catalog.All.FirstOrDefault();
-        _pendingCode = _current?.StubCode;
+        _code = _current?.StubCode ?? string.Empty;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (_current is not null)
         {
-            _ref = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("csharpEditor.sync");
         }
-
-        await SyncEditorAsync();
-    }
-
-    /// <summary>
-    /// Reconciles the mounted Monaco editor with the current C# selection. SQL
-    /// uses a native textarea so it remains editable with touch input.
-    /// </summary>
-    private async Task SyncEditorAsync()
-    {
-        var target = _current is not null ? "csharp" : null;
-
-        if (target is null)
-        {
-            if (_editorMode is not null)
-            {
-                try { await JS.InvokeVoidAsync("monacoInterop.dispose"); } catch { /* circuit gone */ }
-                _editorMode = null;
-            }
-
-            return;
-        }
-
-        if (target == _editorMode)
-        {
-            if (_pendingCode is not null)
-            {
-                await JS.InvokeVoidAsync("monacoInterop.setValue", _pendingCode);
-                _pendingCode = null;
-            }
-
-            return;
-        }
-
-        if (_editorMode is not null)
-        {
-            try { await JS.InvokeVoidAsync("monacoInterop.dispose"); } catch { /* circuit gone */ }
-        }
-
-        var initial = _pendingCode ?? string.Empty;
-        await JS.InvokeVoidAsync("monacoInterop.init", "editor", _ref, initial, "csharp");
-
-        _editorMode = target;
-        _pendingCode = null;
     }
 
     private void SelectProblem(ProblemSet problem)
@@ -313,7 +273,7 @@
         _currentSql = null;
         _result = null;
         _sqlResult = null;
-        _pendingCode = problem.StubCode;
+        _code = problem.StubCode;
     }
 
     private void SelectSql(SqlQuestion question)
@@ -339,7 +299,8 @@
         }
 
         _result = null;
-        await JS.InvokeVoidAsync("monacoInterop.setValue", _current.StubCode);
+        _code = _current.StubCode;
+        await JS.InvokeVoidAsync("csharpEditor.sync");
     }
 
     private async Task RunAsync()
@@ -355,8 +316,7 @@
 
         try
         {
-            var code = await JS.InvokeAsync<string>("monacoInterop.getValue");
-            _result = await Runner.RunAsync(_current, code);
+            _result = await Runner.RunAsync(_current, _code);
         }
         catch (Exception ex)
         {
@@ -399,14 +359,6 @@
         }
     }
 
-    [JSInvokable]
-    public async Task<IReadOnlyList<CompletionEntry>> ProvideCompletions(string code, int offset)
-        => await Roslyn.GetCompletionsAsync(code, offset);
-
-    [JSInvokable]
-    public IReadOnlyList<EditorMarker> ProvideDiagnostics(string code)
-        => Roslyn.GetDiagnostics(code);
-
     private static string LevelLabel(string level) => level switch
     {
         "Developer1" => "Developer 1",
@@ -414,13 +366,4 @@
         _ => level,
     };
 
-    public async ValueTask DisposeAsync()
-    {
-        if (_editorMode is not null)
-        {
-            try { await JS.InvokeVoidAsync("monacoInterop.dispose"); } catch { /* circuit gone */ }
-        }
-
-        _ref?.Dispose();
-    }
 }
