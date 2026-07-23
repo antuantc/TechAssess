@@ -10,6 +10,7 @@
   <ItemGroup>
     <!-- Roslyn: powers Monaco IntelliSense (completions + diagnostics) and the
          in-browser compile/run harness. -->
+    <PackageReference Include="Hlc.Enterprise.AzureAppConfig" Version="20251126.3.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" Version="4.8.0" />
     <!-- Renders the docs/*/Questions.md verbal questions to HTML for the
          in-app viewer. -->
@@ -44,15 +45,11 @@
       <Link>TechAssess.slnx</Link>
     </Content>
 
-    <Content Include="..\InterviewProblems\**\*.cs;..\InterviewProblems\**\*.sql"
-             Exclude="..\InterviewProblems\bin\**;..\InterviewProblems\obj\**"
-             CopyToOutputDirectory="PreserveNewest">
+    <Content Include="..\InterviewProblems\**\*.cs;..\InterviewProblems\**\*.sql" Exclude="..\InterviewProblems\bin\**;..\InterviewProblems\obj\**" CopyToOutputDirectory="PreserveNewest">
       <Link>src\InterviewProblems\%(RecursiveDir)%(Filename)%(Extension)</Link>
     </Content>
 
-    <Content Include="..\..\tests\InterviewProblems.Tests\**\*.cs"
-             Exclude="..\..\tests\InterviewProblems.Tests\bin\**;..\..\tests\InterviewProblems.Tests\obj\**"
-             CopyToOutputDirectory="PreserveNewest">
+    <Content Include="..\..\tests\InterviewProblems.Tests\**\*.cs" Exclude="..\..\tests\InterviewProblems.Tests\bin\**;..\..\tests\InterviewProblems.Tests\obj\**" CopyToOutputDirectory="PreserveNewest">
       <Link>tests\InterviewProblems.Tests\%(RecursiveDir)%(Filename)%(Extension)</Link>
     </Content>
 

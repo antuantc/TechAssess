@@ -84,6 +84,16 @@ a throwaway assembly loaded in a collectible context.
 > **Stack:** .NET 8 Blazor Server · Monaco Editor · Roslyn
 > (`Microsoft.CodeAnalysis.CSharp.Features`) for both IntelliSense and grading.
 
+### Hosting under a shared web server
+
+The web app supports both a host root (`https://example.com/`) and an IIS/Azure
+virtual application (`https://example.com/TechAssess/`). For a virtual
+application, add an application setting named `PathBase` with the virtual path,
+for example `/TechAssess`, and browse to that path. Leave `PathBase` unset when
+the app owns the host root. Navigation and static assets are relative to this
+setting, so they do not escape into another application hosted on the same
+server.
+
 ## Interactive SQL explorer
 
 Let candidates experiment with the database live — results print as a table:

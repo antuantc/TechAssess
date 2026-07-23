@@ -8,7 +8,7 @@
     <aside class="sidebar">
         <h1 class="brand">Interview<span>Console</span></h1>
         <p class="hint">Pick a problem, implement it with IntelliSense, then run the tests. SQL problems run live against the seeded database.</p>
-        <a class="nav-link" href="/questions">Verbal / conceptual questions &rarr;</a>
+        <a class="nav-link" href="questions">Verbal / conceptual questions &rarr;</a>
 
         @foreach (var level in Levels)
         {
@@ -54,6 +54,7 @@
                     <button class="btn ghost" @onclick="() => _showSchema = !_showSchema">
                         @(_showSchema ? "Hide schema" : "Show schema")
                     </button>
+                    <button class="btn ghost" @onclick="ClearSavedWorkAsync">Clear saved work</button>
                     <button class="btn primary" @onclick="RunSqlAsync" disabled="@_running">
                         @(_running ? "Running…" : "Run query")
                     </button>
@@ -94,6 +95,7 @@
                 </div>
                 <div class="toolbar-actions">
                     <button class="btn ghost" @onclick="ResetAsync" disabled="@_running">Reset to stub</button>
+                    <button class="btn ghost" @onclick="ClearSavedWorkAsync">Clear saved work</button>
                     <button class="btn primary" @onclick="RunAsync" disabled="@_running">
                         @(_running ? "Running…" : "Run tests")
                     </button>
@@ -106,6 +108,7 @@
             <div class="editor-host sql-editor-host">
                 <textarea id="sql-editor"
                           class="sql-editor"
+                          data-session-key="@SessionKey(_currentSql.Id)"
                           @bind="_sqlCode"
                           @bind:event="oninput"
                           spellcheck="false"
@@ -122,6 +125,7 @@
                     <pre id="csharp-highlight" class="csharp-highlight" aria-hidden="true"><code></code></pre>
                 <textarea id="csharp-editor"
                           class="csharp-editor"
+                          data-session-key="@SessionKey(_current.Id)"
                           @bind="_code"
                           @bind:event="oninput"
                           spellcheck="false"
@@ -256,10 +260,7 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_current is not null)
-        {
-            await JS.InvokeVoidAsync("csharpEditor.sync");
-        }
+        await TrySyncEditorsAsync();
     }
 
     private void SelectProblem(ProblemSet problem)
@@ -300,8 +301,65 @@
 
         _result = null;
         _code = _current.StubCode;
-        await JS.InvokeVoidAsync("csharpEditor.sync");
+        await TrySyncEditorsAsync();
     }
+
+    private async Task ClearSavedWorkAsync()
+    {
+        try
+        {
+            var key = _current is not null
+                ? SessionKey(_current.Id)
+                : _currentSql is not null
+                    ? SessionKey(_currentSql.Id)
+                    : string.Empty;
+            if (!string.IsNullOrEmpty(key))
+            {
+                var fallback = _current?.StubCode ?? _currentSql?.StarterSql ?? string.Empty;
+                if (_current is not null)
+                {
+                    _code = fallback;
+                    _result = null;
+                }
+                else
+                {
+                    _sqlCode = fallback;
+                    _sqlResult = null;
+                }
+
+                await JS.InvokeVoidAsync("csharpEditor.clear", key, fallback);
+                StateHasChanged();
+            }
+        }
+        catch (JSException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task TrySyncEditorsAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("csharpEditor.syncAll");
+        }
+        catch (JSException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private static string SessionKey(string id) => $"interview-console:draft:{id}";
 
     private async Task RunAsync()
     {
