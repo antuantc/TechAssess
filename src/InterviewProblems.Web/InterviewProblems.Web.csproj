@@ -10,7 +10,6 @@
   <ItemGroup>
     <!-- Roslyn: powers Monaco IntelliSense (completions + diagnostics) and the
          in-browser compile/run harness. -->
-    <PackageReference Include="Hlc.Enterprise.AzureAppConfig" Version="20251126.3.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" Version="4.8.0" />
     <!-- Renders the docs/*/Questions.md verbal questions to HTML for the
          in-app viewer. -->
