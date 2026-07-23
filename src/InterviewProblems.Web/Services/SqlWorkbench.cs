@@ -57,25 +57,6 @@ public sealed class SqlRunResult
 public sealed class SqlWorkbench
 {
     private const char CellSeparator = '\u001f';
-    private static readonly HashSet<string> ForbiddenKeywords = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "ALTER",
-        "ATTACH",
-        "CREATE",
-        "DELETE",
-        "DETACH",
-        "DROP",
-        "INSERT",
-        "PRAGMA",
-        "REINDEX",
-        "RELEASE",
-        "REPLACE",
-        "ROLLBACK",
-        "SAVEPOINT",
-        "UPDATE",
-        "VACUUM",
-    };
-
     private readonly IReadOnlyList<SqlQuestion> _questions = BuildQuestions();
     private readonly Lazy<IReadOnlyList<SchemaTable>> _schema;
 
@@ -108,10 +89,13 @@ public sealed class SqlWorkbench
             return new SqlRunResult { Executed = false, Error = "Write a query, then run it." };
         }
 
-        var validationError = ValidateReadOnlyQuery(candidateSql);
-        if (validationError is not null)
+        if (!SqlQueryPolicy.IsReadOnlySingleQuery(candidateSql))
         {
-            return new SqlRunResult { Executed = false, Error = validationError };
+            return new SqlRunResult
+            {
+                Executed = false,
+                Error = "Only read-only SELECT queries are allowed.",
+            };
         }
 
         QueryResult candidate;
@@ -143,117 +127,6 @@ public sealed class SqlWorkbench
             Correct = ResultsMatch(candidate, expected, question.Ordered),
             ExpectedRowCount = expected.Rows.Count,
         };
-    }
-
-    private static string? ValidateReadOnlyQuery(string sql)
-    {
-        var firstKeyword = string.Empty;
-        var statementEnded = false;
-
-        for (var index = 0; index < sql.Length;)
-        {
-            if (char.IsWhiteSpace(sql[index]))
-            {
-                index++;
-                continue;
-            }
-
-            if (sql[index] == '-' && index + 1 < sql.Length && sql[index + 1] == '-')
-            {
-                index += 2;
-                while (index < sql.Length && sql[index] != '\n')
-                {
-                    index++;
-                }
-
-                continue;
-            }
-
-            if (sql[index] == '/' && index + 1 < sql.Length && sql[index + 1] == '*')
-            {
-                var commentEnd = sql.IndexOf("*/", index + 2, StringComparison.Ordinal);
-                if (commentEnd < 0)
-                {
-                    return "The query contains an unterminated comment.";
-                }
-
-                index = commentEnd + 2;
-                continue;
-            }
-
-            if (sql[index] is '\'' or '"' or '`')
-            {
-                var quote = sql[index++];
-                var closed = false;
-                while (index < sql.Length)
-                {
-                    if (sql[index] != quote)
-                    {
-                        index++;
-                        continue;
-                    }
-
-                    if (index + 1 < sql.Length && sql[index + 1] == quote)
-                    {
-                        index += 2;
-                        continue;
-                    }
-
-                    index++;
-                    closed = true;
-                    break;
-                }
-
-                if (!closed)
-                {
-                    return "The query contains an unterminated quoted value.";
-                }
-
-                continue;
-            }
-
-            if (sql[index] == ';')
-            {
-                if (statementEnded)
-                {
-                    return "Only one SQL statement is allowed.";
-                }
-
-                statementEnded = true;
-                index++;
-                continue;
-            }
-
-            if (statementEnded)
-            {
-                return "Only one SQL statement is allowed.";
-            }
-
-            if (char.IsLetter(sql[index]) || sql[index] == '_')
-            {
-                var wordStart = index++;
-                while (index < sql.Length && (char.IsLetterOrDigit(sql[index]) || sql[index] == '_'))
-                {
-                    index++;
-                }
-
-                var keyword = sql[wordStart..index];
-                firstKeyword = firstKeyword.Length == 0 ? keyword : firstKeyword;
-                if (ForbiddenKeywords.Contains(keyword))
-                {
-                    return "Only read-only SELECT queries are allowed.";
-                }
-
-                continue;
-            }
-
-            index++;
-        }
-
-        return firstKeyword.Equals("SELECT", StringComparison.OrdinalIgnoreCase)
-            || firstKeyword.Equals("WITH", StringComparison.OrdinalIgnoreCase)
-            ? null
-            : "Only read-only SELECT queries are allowed.";
     }
 
     private static IReadOnlyList<string> DisplayRow(object?[] row) =>

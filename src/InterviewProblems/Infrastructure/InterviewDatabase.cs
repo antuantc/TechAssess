@@ -44,6 +44,11 @@ public static class InterviewDatabase
     /// <summary>Run <paramref name="sql"/> against an existing connection.</summary>
     public static QueryResult Query(SqliteConnection connection, string sql)
     {
+        if (!SqlQueryPolicy.IsReadOnlySingleQuery(sql))
+        {
+            throw new InvalidOperationException("Only read-only SQL queries are allowed.");
+        }
+
         using var command = connection.CreateCommand();
         command.CommandText = sql;
 
